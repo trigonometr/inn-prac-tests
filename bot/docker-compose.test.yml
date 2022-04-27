@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  triton-server:
+    container_name: triton-server
+    image: nvcr.io/nvidia/tritonserver:22.02-py3
+    volumes:
+      - ./model_repository:/models
+    command: tritonserver --model-repository=/models
+    networks:
+      - bot
+
+  postgres-db:
+    container_name: postgres-db
+    image: postgres:13-alpine
+    volumes:
+      - test-db-data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=test_admin
+      - POSTGRES_PASSWORD=1234
+      - POSTGRES_DB=test_tg_bot
+    networks:
+      - bot
+
+  tg_bot:
+    container_name: tg_bot
+    build: .
+    command: sh -c "(sleep 8 && python3 src/main.py)"
+    environment:
+      - TESTING=True
+    networks:
+      - bot
+    depends_on:
+      - triton-server
+      - postgres-db
+
+  test_tg_bot:
+    container_name: test_tg_bot
+    build: .
+    command: sh -c "(sh -c src/run_unit_tests.sh) && (sleep 2 && sh -c src/run_integration_tests.sh) && (sleep 8 && sh -c src/run_system_tests.sh)"
+    environment:
+      - TESTING=True
+    networks:
+      - bot
+    depends_on:
+      - triton-server
+      - postgres-db
+      - tg_bot
+
+volumes:
+  test-db-data:
+
+networks:
+  bot:
+    driver: bridge
